@@ -132,6 +132,36 @@ class ModuloHistorial(tk.Frame):
         """Impide escribir caracteres distintos a dígitos numéricos en la Cédula."""
         return texto.isdigit() or texto == ""
 
+    def _formatear_fecha(self, fecha):
+        """Asegura estrictamente el formato DD-MM-AAAA para visualización."""
+        if not fecha:
+            return ""
+        if isinstance(fecha, (datetime.date, datetime.datetime)):
+            return fecha.strftime("%d-%m-%Y")
+        fecha_str = str(fecha).strip()
+        for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d", "%d/%m/%Y"):
+            try:
+                return datetime.datetime.strptime(fecha_str, fmt).strftime("%d-%m-%Y")
+            except ValueError:
+                pass
+        return fecha_str
+
+    def _parsear_fecha(self, fecha):
+        """Obtiene un objeto datetime.date tolerando orígenes YYYY-MM-DD o DD-MM-AAAA."""
+        if not fecha:
+            return None
+        if isinstance(fecha, datetime.datetime):
+            return fecha.date()
+        if isinstance(fecha, datetime.date):
+            return fecha
+        fecha_str = str(fecha).strip()
+        for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d", "%d/%m/%Y"):
+            try:
+                return datetime.datetime.strptime(fecha_str, fmt).date()
+            except ValueError:
+                pass
+        return None
+
     def cargar_tabla_completa(self):
         for fila in self.tabla.get_children():
             self.tabla.delete(fila)
@@ -139,7 +169,9 @@ class ModuloHistorial(tk.Frame):
         registros = base_datos.obtener_registros()
         for reg in registros:
             tag = "codigo_rojo" if reg[10] == "SI" else ""
-            self.tabla.insert("", "end", values=(reg[0], reg[1], reg[2], reg[3], reg[6], reg[7], reg[8], reg[9], reg[10]), tags=(tag,))
+            f_desde = self._formatear_fecha(reg[8])
+            f_hasta = self._formatear_fecha(reg[9])
+            self.tabla.insert("", "end", values=(reg[0], reg[1], reg[2], reg[3], reg[6], reg[7], f_desde, f_hasta, reg[10]), tags=(tag,))
         
         self.lbl_info_estado.config(text="Mostrando la totalidad de registros guardados en el sistema.", fg="#666666")
 
@@ -163,7 +195,9 @@ class ModuloHistorial(tk.Frame):
 
         for reg in registros:
             tag = "codigo_rojo" if reg[10] == "SI" else ""
-            self.tabla.insert("", "end", values=(reg[0], reg[1], reg[2], reg[3], reg[6], reg[7], reg[8], reg[9], reg[10]), tags=(tag,))
+            f_desde = self._formatear_fecha(reg[8])
+            f_hasta = self._formatear_fecha(reg[9])
+            self.tabla.insert("", "end", values=(reg[0], reg[1], reg[2], reg[3], reg[6], reg[7], f_desde, f_hasta, reg[10]), tags=(tag,))
 
         fecha_actual = datetime.date.today()
         hace_un_ano = fecha_actual - datetime.timedelta(days=365)
@@ -178,10 +212,9 @@ class ModuloHistorial(tk.Frame):
         for reg in registros:
             tipo = reg[6]
             dias = reg[7]
-            try:
-                f_desde = datetime.datetime.strptime(reg[8], "%Y-%m-%d").date()
-                f_hasta = datetime.datetime.strptime(reg[9], "%Y-%m-%d").date()
-            except ValueError:
+            f_desde = self._parsear_fecha(reg[8])
+            f_hasta = self._parsear_fecha(reg[9])
+            if not f_desde or not f_hasta:
                 continue
 
             if "Cuido" in tipo and f_desde >= hace_un_ano:
@@ -196,7 +229,7 @@ class ModuloHistorial(tk.Frame):
                     fecha_fin_activo = f_hasta
 
         tipo_ultimo = ultimo_reg[6]
-        f_hasta_ultimo = datetime.datetime.strptime(ultimo_reg[9], "%Y-%m-%d").date()
+        f_hasta_ultimo = self._parsear_fecha(ultimo_reg[9]) or datetime.date.today()
         fecha_inicio_renovacion = f_hasta_ultimo + datetime.timedelta(days=1)
 
         if "Cuido" in tipo_ultimo:
@@ -260,10 +293,17 @@ class ModuloHistorial(tk.Frame):
                 hace_un_ano = fecha_actual - datetime.timedelta(days=365)
                 hace_seis_meses = fecha_actual - datetime.timedelta(days=180)
 
-                dias_cuido = sum(r[7] for r in registros if "Cuido" in r[6] and datetime.datetime.strptime(r[8], "%Y-%m-%d").date() >= hace_un_ano)
-                dias_reposo = sum(r[7] for r in registros if ("Reposo" in r[6] or "Natal" in r[6]) and datetime.datetime.strptime(r[8], "%Y-%m-%d").date() >= hace_seis_meses)
+                dias_cuido = 0
+                dias_reposo = 0
+                for r in registros:
+                    f_d = self._parsear_fecha(r[8])
+                    if f_d:
+                        if "Cuido" in r[6] and f_d >= hace_un_ano:
+                            dias_cuido += r[7]
+                        elif ("Reposo" in r[6] or "Natal" in r[6]) and f_d >= hace_seis_meses:
+                            dias_reposo += r[7]
 
-                f_hasta_ultimo = datetime.datetime.strptime(reg[9], "%Y-%m-%d").date()
+                f_hasta_ultimo = self._parsear_fecha(reg[9]) or datetime.date.today()
                 fecha_inicio_renovacion = f_hasta_ultimo + datetime.timedelta(days=1)
 
                 if "Cuido" in reg[6]:
@@ -348,8 +388,8 @@ class ModuloHistorial(tk.Frame):
         campos = [
             ("Cédula:", reg[1]), ("Nombre:", reg[2]), ("Teléfono:", reg[3]),
             ("Institución:", reg[4]), ("Cargo:", reg[5]), ("Trámite:", reg[6]),
-            ("Días:", str(reg[7])), ("Desde (AAAA-MM-DD):", reg[8]),
-            ("Hasta (AAAA-MM-DD):", reg[9]), ("Código Rojo:", reg[10]),
+            ("Días:", str(reg[7])), ("Desde (DD-MM-AAAA):", self._formatear_fecha(reg[8])),
+            ("Hasta (DD-MM-AAAA):", self._formatear_fecha(reg[9])), ("Código Rojo:", reg[10]),
             ("Médico:", reg[11]), ("Especialidad:", reg[12]), ("Procesador:", reg[13])
         ]
 
@@ -380,8 +420,8 @@ class ModuloHistorial(tk.Frame):
                 entries["Cargo:"].get().strip(),
                 entries["Trámite:"].get().strip(),
                 int(entries["Días:"].get().strip()),
-                entries["Desde (AAAA-MM-DD):"].get().strip(),
-                entries["Hasta (AAAA-MM-DD):"].get().strip(),
+                self._formatear_fecha(entries["Desde (DD-MM-AAAA):"].get().strip()),
+                self._formatear_fecha(entries["Hasta (DD-MM-AAAA):"].get().strip()),
                 entries["Código Rojo:"].get().strip(),
                 entries["Médico:"].get().strip(),
                 entries["Especialidad:"].get().strip(),
@@ -467,9 +507,8 @@ class ModuloHistorial(tk.Frame):
                 es_cuido = "Cuido" in tipo_tramite
                 es_reposo = "Reposo" in tipo_tramite or "Natal" in tipo_tramite
 
-                try:
-                    f_hasta = datetime.datetime.strptime(reg[9], "%Y-%m-%d").date()
-                except ValueError:
+                f_hasta = self._parsear_fecha(reg[9])
+                if not f_hasta:
                     continue
 
                 esta_activo = f_hasta >= fecha_actual
@@ -654,7 +693,7 @@ class ModuloHistorial(tk.Frame):
                 elements.append(Paragraph(f"<b>{titulo_filtro}</b>", header_blue_subtitle))
                 elements.append(Spacer(1, 4))
                 
-                fecha_fmt = fecha_actual.strftime("%d/%m/%Y")
+                fecha_fmt = fecha_actual.strftime("%d-%m-%Y")
                 elements.append(Paragraph(f"Fecha de emisión: {fecha_fmt} | Total de registros: {len(lista_filtrada)}", meta_info_style))
                 elements.append(Spacer(1, 10))
 
@@ -672,8 +711,8 @@ class ModuloHistorial(tk.Frame):
                         Paragraph(str(reg[3]), cell_center),
                         Paragraph(str(reg[6]), cell_center),
                         Paragraph(str(reg[7]), cell_center),
-                        Paragraph(str(reg[8]), cell_center),
-                        Paragraph(str(reg[9]), cell_center),
+                        Paragraph(self._formatear_fecha(reg[8]), cell_center),
+                        Paragraph(self._formatear_fecha(reg[9]), cell_center),
                         Paragraph(f"<font color='{color_estado}'><b>{estado_str}</b></font>", cell_center),
                         Paragraph(str(reg[10]), cell_center)
                     ])
