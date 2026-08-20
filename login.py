@@ -3,6 +3,16 @@ import tkinter as tk
 from tkinter import messagebox
 from PIL import Image, ImageTk
 
+
+# Usuarios del sistema: usuario -> (clave, rol)
+# rol "admin"        -> acceso completo (registrar, editar, eliminar, renovar, reportes)
+# rol "visualizador" -> solo consulta / búsqueda / reportes, sin permisos de modificación
+USUARIOS = {
+    "admin": {"clave": "1234", "rol": "admin"},
+    "visualizador": {"clave": "1234", "rol": "visualizador"},
+}
+
+
 class VentanaLogin:
     def __init__(self, root, al_ingresar_exitoso):
         self.root = root
@@ -91,10 +101,12 @@ class VentanaLogin:
         lbl_img.pack(pady=(0, 20))
 
     def validar_login(self):
-        usuario = self.txt_usuario.get()
+        usuario = self.txt_usuario.get().strip()
         clave = self.txt_clave.get()
 
-        if usuario == "admin" and clave == "1234":
-            self.al_ingresar_exitoso()
+        datos_usuario = USUARIOS.get(usuario)
+
+        if datos_usuario and datos_usuario["clave"] == clave:
+            self.al_ingresar_exitoso(datos_usuario["rol"])
         else:
             messagebox.showerror("Error de Autenticación", "Usuario o contraseña incorrectos.")

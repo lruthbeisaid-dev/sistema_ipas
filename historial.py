@@ -12,9 +12,10 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
 class ModuloHistorial(tk.Frame):
-    def __init__(self, parent, callback_renovar=None):
+    def __init__(self, parent, callback_renovar=None, rol="admin"):
         super().__init__(parent, bg="#ffffff", padx=20, pady=20, bd=1, relief="solid")
         self.callback_renovar = callback_renovar
+        self.rol = rol
 
         self.COLOR_TEXT_DARK = "#333333"
         self.COLOR_PRIMARY = "#00a8cc"
@@ -92,6 +93,13 @@ class ModuloHistorial(tk.Frame):
             bg="#f57c00", fg="#ffffff", bd=0, cursor="hand2", padx=12, pady=6, command=self.generar_reporte_pdf
         )
         btn_reporte.pack(side="right", padx=5)
+
+        # El rol "visualizador" solo puede consultar, buscar y generar reportes:
+        # no tiene permiso para renovar, editar ni eliminar registros.
+        if self.rol == "visualizador":
+            btn_renovar.configure(state="disabled")
+            btn_editar.configure(state="disabled")
+            btn_eliminar.configure(state="disabled")
 
         # --- TABLA DE REGISTROS ---
         columnas = ("id", "cedula", "nombre", "telefono", "tipo", "dias", "desde", "hasta", "rojo")
@@ -281,6 +289,9 @@ class ModuloHistorial(tk.Frame):
                 self.renovar_dias_restantes()
 
     def renovar_dias_restantes(self):
+        if self.rol == "visualizador":
+            messagebox.showerror("Acceso Denegado", "Su rol de Visualizador no tiene permiso para renovar registros.")
+            return
         seleccion = self.tabla.selection()
         if seleccion:
             item = self.tabla.item(seleccion[0])
@@ -347,6 +358,9 @@ class ModuloHistorial(tk.Frame):
             )
 
     def eliminar_registro_seleccionado(self):
+        if self.rol == "visualizador":
+            messagebox.showerror("Acceso Denegado", "Su rol de Visualizador no tiene permiso para eliminar registros.")
+            return
         seleccion = self.tabla.selection()
         if not seleccion:
             messagebox.showwarning("Atención", "Seleccione una fila de la tabla para eliminar.")
@@ -363,6 +377,9 @@ class ModuloHistorial(tk.Frame):
             self.cargar_tabla_completa()
 
     def abrir_ventana_editar(self):
+        if self.rol == "visualizador":
+            messagebox.showerror("Acceso Denegado", "Su rol de Visualizador no tiene permiso para editar registros.")
+            return
         seleccion = self.tabla.selection()
         if not seleccion:
             messagebox.showwarning("Atención", "Seleccione un registro de la tabla para editar.")

@@ -5,8 +5,9 @@ from formulario import ModuloFormulario
 from historial import ModuloHistorial
 
 class VentanaDashboard:
-    def __init__(self, root):
+    def __init__(self, root, rol="admin"):
         self.root = root
+        self.rol = rol
         self.root.title("IPASME - Sistema de Gestión de Reposos y Cuidos")
         self.root.geometry("1150x700")
         self.root.configure(bg="#f4f6f8")
@@ -28,6 +29,13 @@ class VentanaDashboard:
         )
         lbl_logo_top.pack(side="left", padx=15, pady=10)
 
+        texto_rol = "Administrador" if self.rol == "admin" else "Visualizador (solo lectura)"
+        lbl_rol_top = tk.Label(
+            self.topbar, text=texto_rol,
+            font=("Helvetica", 10, "bold"), bg=self.COLOR_TOPBAR, fg="#ffffff"
+        )
+        lbl_rol_top.pack(side="right", padx=15, pady=10)
+
         self.sidebar = tk.Frame(self.root, bg=self.COLOR_SIDEBAR, width=220)
         self.sidebar.pack(side="left", fill="y")
         self.sidebar.pack_propagate(False)
@@ -47,10 +55,15 @@ class VentanaDashboard:
 
         self.frame_dash = tk.Frame(self.area_trabajo, bg=self.COLOR_BG)
 
-        self.modulo_form = ModuloFormulario(self.area_trabajo, al_guardar_callback=self.actualizar_metricas)
-        self.modulo_historial = ModuloHistorial(self.area_trabajo, callback_renovar=self.iniciar_renovacion_desde_historial)
+        self.modulo_form = ModuloFormulario(self.area_trabajo, al_guardar_callback=self.actualizar_metricas, rol=self.rol)
+        self.modulo_historial = ModuloHistorial(self.area_trabajo, callback_renovar=self.iniciar_renovacion_desde_historial, rol=self.rol)
 
         self.construir_modulo_dash()
+
+        # El rol "visualizador" no tiene permiso para registrar nuevos permisos
+        if self.rol == "visualizador":
+            self.btn_nav_nuevo.pack_forget()
+
         self.mostrar_modulo_dash()
 
     def crear_boton_nav(self, texto, comando):
@@ -152,6 +165,9 @@ class VentanaDashboard:
         self.card_reposos_activos.config(text=str(reposos_activos))
 
     def mostrar_modulo_nuevo(self):
+        # Protección adicional: un visualizador no puede acceder a este módulo
+        if self.rol == "visualizador":
+            return
         self.ocultar_modulos()
         self.resaltar_boton(self.btn_nav_nuevo)
         self.modulo_form.pack(fill="both", expand=True)

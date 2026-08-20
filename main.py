@@ -3,11 +3,11 @@ from base_datos import inicializar_bd
 from login import VentanaLogin
 from dashboard import VentanaDashboard
 
-def abrir_dashboard():
+def abrir_dashboard(rol):
     root_login.destroy()
     
     root_principal = tk.Tk()
-    app = VentanaDashboard(root_principal)
+    app = VentanaDashboard(root_principal, rol)
     root_principal.mainloop()
 
 if __name__ == "__main__":

@@ -5,9 +5,10 @@ from tkinter import ttk, messagebox
 import base_datos
 
 class ModuloFormulario(tk.Frame):
-    def __init__(self, parent, al_guardar_callback=None):
+    def __init__(self, parent, al_guardar_callback=None, rol="admin"):
         super().__init__(parent, bg="#ffffff", padx=25, pady=20, bd=1, relief="solid")
         self.al_guardar_callback = al_guardar_callback
+        self.rol = rol
 
         self.COLOR_TEXT_DARK = "#333333"
         self.COLOR_PRIMARY = "#00a8cc"
@@ -126,6 +127,10 @@ class ModuloFormulario(tk.Frame):
         )
         btn_guardar.grid(row=15, column=0, columnspan=2, pady=(15, 0), ipady=8, sticky="ew")
 
+        # El rol "visualizador" no tiene permiso para registrar reposos/cuidos
+        if self.rol == "visualizador":
+            btn_guardar.configure(state="disabled")
+
     def _validar_entrada_solo_numeros(self, texto):
         """Impide escribir caracteres distintos a dígitos numéricos en la Cédula."""
         return texto.isdigit() or texto == ""
@@ -158,6 +163,9 @@ class ModuloFormulario(tk.Frame):
         self.ent_fecha_desde.insert(0, fecha_fmt)
 
     def procesar_registro(self):
+        if self.rol == "visualizador":
+            messagebox.showerror("Acceso Denegado", "Su rol de Visualizador no tiene permiso para registrar trámites.")
+            return
         try:
             cedula_raw = self.ent_cedula.get().strip()
             cedula = re.sub(r"\D", "", cedula_raw)
