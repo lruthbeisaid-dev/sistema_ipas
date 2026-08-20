@@ -3,6 +3,7 @@ import re
 import tkinter as tk
 from tkinter import ttk, messagebox
 import base_datos
+import feriados
 
 class ModuloFormulario(tk.Frame):
     def __init__(self, parent, al_guardar_callback=None, rol="admin"):
@@ -119,6 +120,16 @@ class ModuloFormulario(tk.Frame):
 
         self.columnconfigure(1, weight=1)
 
+        # --- Autocompletado y sugerencia automática de fechas ---
+        self.campo_desde_manual = False
+        self.campo_hasta_manual = False
+
+        self.ent_cedula.bind("<FocusOut>", self._autocompletar_beneficiario)
+        self.ent_dias.bind("<KeyRelease>", self._al_cambiar_dias_o_tipo)
+        self.cmb_tipo.bind("<<ComboboxSelected>>", self._al_cambiar_dias_o_tipo)
+        self.ent_fecha_desde.bind("<KeyRelease>", self._al_editar_fecha_desde_manual)
+        self.ent_fecha_hasta.bind("<KeyRelease>", self._al_editar_fecha_hasta_manual)
+
         # Botón de guardar
         btn_guardar = tk.Button(
             self, text="GUARDAR REGISTRO", font=("Helvetica", 11, "bold"),
@@ -134,6 +145,72 @@ class ModuloFormulario(tk.Frame):
     def _validar_entrada_solo_numeros(self, texto):
         """Impide escribir caracteres distintos a dígitos numéricos en la Cédula."""
         return texto.isdigit() or texto == ""
+
+    def _autocompletar_beneficiario(self, event=None):
+        """Al salir del campo Cédula, si el beneficiario ya está registrado,
+        rellena sus datos personales automáticamente (campos vacíos únicamente)."""
+        cedula = re.sub(r"\D", "", self.ent_cedula.get().strip())
+        if not cedula:
+            return
+
+        beneficiario = base_datos.obtener_beneficiario_por_cedula(cedula)
+        if not beneficiario:
+            return
+
+        _, nombre, telefono, institucion, cargo = beneficiario
+
+        if not self.ent_nombre.get().strip():
+            self.ent_nombre.insert(0, nombre)
+        if not self.ent_telefono.get().strip():
+            self.ent_telefono.insert(0, telefono)
+        if not self.ent_institucion.get().strip():
+            self.ent_institucion.insert(0, institucion)
+        if cargo in self.cmb_cargo["values"]:
+            self.cmb_cargo.set(cargo)
+
+    def _al_editar_fecha_desde_manual(self, event=None):
+        self.campo_desde_manual = True
+        self._recalcular_fecha_hasta()
+
+    def _al_editar_fecha_hasta_manual(self, event=None):
+        self.campo_hasta_manual = True
+
+    def _al_cambiar_dias_o_tipo(self, event=None):
+        if not self.campo_desde_manual:
+            self._sugerir_fecha_desde()
+        self._recalcular_fecha_hasta()
+
+    def _sugerir_fecha_desde(self):
+        hoy = datetime.date.today()
+        self.ent_fecha_desde.delete(0, tk.END)
+        self.ent_fecha_desde.insert(0, hoy.strftime("%d-%m-%Y"))
+
+    def _recalcular_fecha_hasta(self):
+        """Sugiere la 'Fecha Hasta' según los días solicitados y el tipo de trámite:
+        para Reposos cuentan todos los días corridos, para Cuidos solo días hábiles
+        (sin sábados, domingos ni feriados de Venezuela). El usuario puede modificarla."""
+        if self.campo_hasta_manual:
+            return
+
+        dias_str = self.ent_dias.get().strip()
+        if not dias_str.isdigit() or int(dias_str) <= 0:
+            return
+
+        try:
+            fecha_desde = datetime.datetime.strptime(self.ent_fecha_desde.get().strip(), "%d-%m-%Y").date()
+        except ValueError:
+            return
+
+        dias = int(dias_str)
+        tipo = self.cmb_tipo.get()
+
+        if tipo == "Cuido":
+            fecha_hasta = feriados.sumar_dias_habiles(fecha_desde, dias)
+        else:
+            fecha_hasta = feriados.sumar_dias_calendario(fecha_desde, dias)
+
+        self.ent_fecha_hasta.delete(0, tk.END)
+        self.ent_fecha_hasta.insert(0, fecha_hasta.strftime("%d-%m-%Y"))
 
     def prellenar_para_renovacion(self, cedula, nombre, telefono, institucion, cargo, tipo, dias_restantes, fecha_inicio_renovacion):
         self.limpiar_campos()
@@ -161,6 +238,12 @@ class ModuloFormulario(tk.Frame):
                 fecha_fmt = str(fecha_inicio_renovacion)
 
         self.ent_fecha_desde.insert(0, fecha_fmt)
+
+        # La fecha desde ya fue fijada intencionalmente por la renovación;
+        # se sugiere la fecha hasta en base a esta, pero sigue siendo editable.
+        self.campo_desde_manual = True
+        self.campo_hasta_manual = False
+        self._recalcular_fecha_hasta()
 
     def procesar_registro(self):
         if self.rol == "visualizador":
@@ -299,13 +382,13 @@ class ModuloFormulario(tk.Frame):
                 )
                 return
 
-            datos = (
-                cedula, nombre, telefono, institucion, cargo, tipo, 
-                dias, str(fecha_desde), str(fecha_hasta), codigo_rojo, 
-                medico, especialidad, codigo_registro
+            datos_beneficiario = (cedula, nombre, telefono, institucion, cargo)
+            datos_reposo = (
+                cedula, tipo, dias, str(fecha_desde), str(fecha_hasta),
+                codigo_rojo, medico, especialidad, codigo_registro
             )
-            
-            base_datos.guardar_registro(datos)
+
+            base_datos.guardar_registro(datos_beneficiario, datos_reposo)
             messagebox.showinfo("Registro Exitoso", f"Trámite registrado correctamente hasta el {fecha_hasta.strftime('%d-%m-%Y')}.")
             
             self.limpiar_campos()
@@ -330,3 +413,5 @@ class ModuloFormulario(tk.Frame):
         self.cmb_tipo.current(0)
         self.cmb_seleccion_codigo_asistencial.current(0)
         self.cmb_especialidad.current(0)
+        self.campo_desde_manual = False
+        self.campo_hasta_manual = False

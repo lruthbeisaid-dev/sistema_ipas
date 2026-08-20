@@ -43,6 +43,7 @@ class VentanaLogin:
             fg="#1a1a1a", bd=0, relief="flat", insertbackground="black"
         )
         self.txt_usuario.pack(ipady=8, ipadx=10, fill="x")
+        self.txt_usuario.bind("<Return>", lambda evento: self.validar_login())
 
         # Entrada de Contraseña
         self.lbl_clave = tk.Label(
@@ -56,6 +57,7 @@ class VentanaLogin:
             fg="#1a1a1a", bd=0, show="*", relief="flat", insertbackground="black"
         )
         self.txt_clave.pack(ipady=8, ipadx=10, fill="x")
+        self.txt_clave.bind("<Return>", lambda evento: self.validar_login())
 
         # Botón de Ingreso
         self.btn_login = tk.Button(

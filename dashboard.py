@@ -1,13 +1,15 @@
 import tkinter as tk
+from tkinter import messagebox
 import datetime
 import base_datos
 from formulario import ModuloFormulario
 from historial import ModuloHistorial
 
 class VentanaDashboard:
-    def __init__(self, root, rol="admin"):
+    def __init__(self, root, rol="admin", al_cerrar_sesion=None):
         self.root = root
         self.rol = rol
+        self.al_cerrar_sesion = al_cerrar_sesion
         self.root.title("IPASME - Sistema de Gestión de Reposos y Cuidos")
         self.root.geometry("1150x700")
         self.root.configure(bg="#f4f6f8")
@@ -49,6 +51,14 @@ class VentanaDashboard:
         self.btn_nav_dash = self.crear_boton_nav(" Dashboard", self.mostrar_modulo_dash)
         self.btn_nav_nuevo = self.crear_boton_nav(" Registrar Permiso", self.mostrar_modulo_nuevo)
         self.btn_nav_tabla = self.crear_boton_nav(" Consultas / Histórico", self.mostrar_modulo_tabla)
+
+        self.btn_cerrar_sesion = tk.Button(
+            self.sidebar, text=" 🔒 Cerrar Sesión", font=("Helvetica", 10, "bold"),
+            bg=self.COLOR_SIDEBAR, fg="#e57373", activebackground="#c62828",
+            activeforeground="#ffffff", bd=0, anchor="w", padx=15, cursor="hand2",
+            command=self.cerrar_sesion
+        )
+        self.btn_cerrar_sesion.pack(side="bottom", fill="x", ipady=12, pady=15)
 
         self.area_trabajo = tk.Frame(self.root, bg=self.COLOR_BG)
         self.area_trabajo.pack(side="right", fill="both", expand=True, padx=15, pady=15)
@@ -183,3 +193,9 @@ class VentanaDashboard:
         self.modulo_form.prellenar_para_renovacion(
             cedula, nombre, telefono, institucion, cargo, tipo, dias_restantes, fecha_inicio
         )
+
+    def cerrar_sesion(self):
+        if messagebox.askyesno("Cerrar Sesión", "¿Está seguro de que desea cerrar la sesión?"):
+            self.root.destroy()
+            if self.al_cerrar_sesion:
+                self.al_cerrar_sesion()

@@ -47,6 +47,7 @@ class ModuloHistorial(tk.Frame):
             validate="key", validatecommand=self.vcmd_solo_numeros
         )
         self.ent_buscar_cedula.pack(side="left", padx=5)
+        self.ent_buscar_cedula.bind("<Return>", lambda evento: self.consultar_estado_cedula())
 
         btn_buscar = tk.Button(
             frame_busqueda, text="CONSULTAR DÍAS", font=("Helvetica", 9, "bold"),
