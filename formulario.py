@@ -5,168 +5,266 @@ from tkinter import ttk, messagebox
 import base_datos
 import feriados
 
+TIPOS_TRAMITE = ["Cuido", "Reposo Regular", "Pre-Natal (61 días)", "Post-Natal (89 días)",
+                  "Pre y Post-Natal (150 días)"]
+
+PARENTESCOS = ["Hijo(a)", "Madre", "Padre", "Esposo(a)", "Otro"]
+
+COLORES_ASISTENCIALES = ["Verde claro", "Verde oscuro", "Amarillo", "Naranja", "Rojo",
+                          "Azul claro", "Azul oscuro", "rosado", "Fucsia", "Gris", "Negro", "Marron"]
+
+ESPECIALIDADES = [
+    "Medicina general", "Medicina crítica", "Medicina familiar",
+    "Medicina interna", "Psiquiatria", "Psicología", "Pediatría", "Ginecología",
+    "Otorrinolaringología", "Traumatología", "Cardiología", "Odontología"
+]
+
+
 class ModuloFormulario(tk.Frame):
-    def __init__(self, parent, al_guardar_callback=None, rol="admin"):
+    def __init__(self, parent, al_guardar_callback=None, rol="admin", ir_a_personas_callback=None):
         super().__init__(parent, bg="#ffffff", padx=25, pady=20, bd=1, relief="solid")
         self.al_guardar_callback = al_guardar_callback
         self.rol = rol
+        self.ir_a_personas_callback = ir_a_personas_callback
+        self.persona_encontrada = None
 
         self.COLOR_TEXT_DARK = "#333333"
         self.COLOR_PRIMARY = "#00a8cc"
 
-        # Validación en tiempo real: Solo permite dígitos numéricos en el Entry de la Cédula
-        vcmd_solo_numeros = (self.register(self._validar_entrada_solo_numeros), '%P')
+        vcmd_cedula = (self.register(self._validar_cedula), '%P')
 
-        lbl_t = tk.Label(
-            self, 
-            text="Formulario de Registro de Reposo o Cuido", 
-            font=("Helvetica", 14, "bold"), 
-            bg="#ffffff", 
-            fg=self.COLOR_TEXT_DARK
+        tk.Label(
+            self, text="Registro de Permisos (Reposo o Cuido)",
+            font=("Helvetica", 14, "bold"), bg="#ffffff", fg=self.COLOR_TEXT_DARK
+        ).pack(anchor="w", pady=(0, 15))
+
+        # --- Paso 1: búsqueda de la persona por cédula ---
+        frame_busqueda = tk.Frame(self, bg="#f0f2f5", padx=15, pady=12, bd=1, relief="groove")
+        frame_busqueda.pack(fill="x", pady=(0, 12))
+
+        tk.Label(frame_busqueda, text="Cédula del Solicitante:", font=("Helvetica", 10, "bold"),
+                 bg="#f0f2f5", fg="#555555").grid(row=0, column=0, sticky="w", padx=(0, 8))
+        self.ent_cedula = tk.Entry(
+            frame_busqueda, font=("Helvetica", 11), width=18,
+            validate="key", validatecommand=vcmd_cedula
         )
-        lbl_t.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 15))
+        self.ent_cedula.grid(row=0, column=1, sticky="w")
+        self.ent_cedula.bind("<Return>", lambda e: self.buscar_persona())
+        self.ent_cedula.bind("<FocusOut>", lambda e: self.buscar_persona())
 
-        # --- ORDEN ESTRICTAMENTE VERTICAL HACIA ABAJO ---
-        fields_order = [
-            ("Nombre y Apellido:", 1),
-            ("Cédula:", 2),
-            ("Teléfono:", 3),
-            ("Cargo:", 4),
-            ("Institución:", 5),
-            ("Tipo de Trámite:", 6),
-            ("Días Solicitados:", 7),
-            ("Fecha Desde (DD-MM-AAAA):", 8),
-            ("Fecha Hasta (DD-MM-AAAA):", 9),
-            ("Médico Tratante:", 10),
-            ("Código Registro Médico:", 11),
-            ("Código Coordinación Asistencial:", 12),
-            ("Asignación de Código / Color:", 13),
-            ("Especialidad:", 14)
-        ]
+        tk.Button(
+            frame_busqueda, text="🔍 Buscar", font=("Helvetica", 9, "bold"), bg=self.COLOR_PRIMARY,
+            fg="#ffffff", bd=0, cursor="hand2", padx=10, command=self.buscar_persona
+        ).grid(row=0, column=2, padx=10)
 
-        for text, r in fields_order:
+        self.lbl_info_persona = tk.Label(
+            frame_busqueda, text="Ingrese la cédula y presione Buscar (o Enter) para continuar.",
+            font=("Helvetica", 9, "italic"), bg="#f0f2f5", fg="#666666", justify="left", wraplength=650
+        )
+        self.lbl_info_persona.grid(row=1, column=0, columnspan=3, sticky="w", pady=(10, 0))
+
+        self.btn_ir_a_registrar = tk.Button(
+            frame_busqueda, text="➕ Ir a Registrar Persona", font=("Helvetica", 9, "bold"),
+            bg="#f57c00", fg="#ffffff", bd=0, cursor="hand2", padx=10,
+            command=self._ir_a_registrar_persona
+        )
+
+        # --- Paso 2: datos del trámite (deshabilitados hasta encontrar a la persona) ---
+        self.frame_tramite = tk.Frame(self, bg="#ffffff")
+        self.frame_tramite.pack(fill="both", expand=True)
+
+        fila = 0
+
+        def nueva_fila():
+            nonlocal fila
+            f = fila
+            fila += 1
+            return f
+
+        def crear_etiqueta(texto, r):
             tk.Label(
-                self, text=text, font=("Helvetica", 10, "bold"), 
+                self.frame_tramite, text=texto, font=("Helvetica", 10, "bold"),
                 bg="#ffffff", fg="#555555"
             ).grid(row=r, column=0, sticky="w", pady=4, padx=5)
 
-        # 1. Nombre y Apellido
-        self.ent_nombre = tk.Entry(self, font=("Helvetica", 10), bg="#f0f2f5", bd=1)
-        self.ent_nombre.grid(row=1, column=1, sticky="ew", pady=4, padx=10)
-
-        # 2. Cédula (Bloqueado para ingresar SOLO números)
-        self.ent_cedula = tk.Entry(
-            self, font=("Helvetica", 10), bg="#f0f2f5", bd=1,
-            validate="key", validatecommand=vcmd_solo_numeros
-        )
-        self.ent_cedula.grid(row=2, column=1, sticky="ew", pady=4, padx=10)
-
-        # 3. Teléfono
-        self.ent_telefono = tk.Entry(self, font=("Helvetica", 10), bg="#f0f2f5", bd=1)
-        self.ent_telefono.grid(row=3, column=1, sticky="ew", pady=4, padx=10)
-
-        # 4. Cargo
-        self.cmb_cargo = ttk.Combobox(self, values=["Docente", "Administrativo", "Personal de Apoyo"], state="readonly")
-        self.cmb_cargo.grid(row=4, column=1, sticky="ew", pady=4, padx=10)
-        self.cmb_cargo.current(0)
-
-        # 5. Institución
-        self.ent_institucion = tk.Entry(self, font=("Helvetica", 10), bg="#f0f2f5", bd=1)
-        self.ent_institucion.grid(row=5, column=1, sticky="ew", pady=4, padx=10)
-
-        # 6. Tipo de Trámite
-        self.cmb_tipo = ttk.Combobox(self, values=["Cuido", "Reposo Regular", "Pre-Natal (61 días)", "Post-Natal (89 días)"], state="readonly")
-        self.cmb_tipo.grid(row=6, column=1, sticky="ew", pady=4, padx=10)
+        # Tipo de Trámite
+        r = nueva_fila()
+        crear_etiqueta("Tipo de Trámite:", r)
+        self.cmb_tipo = ttk.Combobox(self.frame_tramite, values=TIPOS_TRAMITE, state="readonly")
+        self.cmb_tipo.grid(row=r, column=1, sticky="ew", pady=4, padx=10)
         self.cmb_tipo.current(0)
 
-        # 7. Días Solicitados
-        self.ent_dias = tk.Entry(self, font=("Helvetica", 10), bg="#f0f2f5", bd=1)
-        self.ent_dias.grid(row=7, column=1, sticky="ew", pady=4, padx=10)
+        # Campos exclusivos de Cuido
+        r = nueva_fila()
+        self.lbl_beneficiario_para = tk.Label(
+            self.frame_tramite, text="¿Para quién se solicita el cuido?:", font=("Helvetica", 10, "bold"),
+            bg="#ffffff", fg="#555555"
+        )
+        self.ent_beneficiario_para = tk.Entry(self.frame_tramite, font=("Helvetica", 10), bg="#f0f2f5", bd=1)
+        self._fila_beneficiario_para = r
 
-        # 8. Fecha Desde (DD-MM-AAAA)
-        self.ent_fecha_desde = tk.Entry(self, font=("Helvetica", 10), bg="#f0f2f5", bd=1)
-        self.ent_fecha_desde.grid(row=8, column=1, sticky="ew", pady=4, padx=10)
+        r = nueva_fila()
+        self.lbl_parentesco = tk.Label(
+            self.frame_tramite, text="Parentesco:", font=("Helvetica", 10, "bold"),
+            bg="#ffffff", fg="#555555"
+        )
+        self.cmb_parentesco = ttk.Combobox(self.frame_tramite, values=PARENTESCOS, state="readonly")
+        self.cmb_parentesco.current(0)
+        self._fila_parentesco = r
 
-        # 9. Fecha Hasta (DD-MM-AAAA)
-        self.ent_fecha_hasta = tk.Entry(self, font=("Helvetica", 10), bg="#f0f2f5", bd=1)
-        self.ent_fecha_hasta.grid(row=9, column=1, sticky="ew", pady=4, padx=10)
+        # Días Solicitados
+        r = nueva_fila()
+        crear_etiqueta("Días Solicitados:", r)
+        self.ent_dias = tk.Entry(self.frame_tramite, font=("Helvetica", 10), bg="#f0f2f5", bd=1)
+        self.ent_dias.grid(row=r, column=1, sticky="ew", pady=4, padx=10)
 
-        # 10. Médico Tratante
-        self.ent_medico = tk.Entry(self, font=("Helvetica", 10), bg="#f0f2f5", bd=1)
-        self.ent_medico.grid(row=10, column=1, sticky="ew", pady=4, padx=10)
+        # Fecha Desde
+        r = nueva_fila()
+        crear_etiqueta("Fecha Desde (DD-MM-AAAA):", r)
+        self.ent_fecha_desde = tk.Entry(self.frame_tramite, font=("Helvetica", 10), bg="#f0f2f5", bd=1)
+        self.ent_fecha_desde.grid(row=r, column=1, sticky="ew", pady=4, padx=10)
 
-        # 11. Código Registro Médico
-        self.ent_codigo_medico = tk.Entry(self, font=("Helvetica", 10), bg="#f0f2f5", bd=1)
-        self.ent_codigo_medico.grid(row=11, column=1, sticky="ew", pady=4, padx=10)
+        # Fecha Hasta + botón de reinicio
+        r = nueva_fila()
+        crear_etiqueta("Fecha Hasta (DD-MM-AAAA):", r)
+        frame_hasta = tk.Frame(self.frame_tramite, bg="#ffffff")
+        frame_hasta.grid(row=r, column=1, sticky="ew", pady=4, padx=10)
+        frame_hasta.columnconfigure(0, weight=1)
+        self.ent_fecha_hasta = tk.Entry(frame_hasta, font=("Helvetica", 10), bg="#f0f2f5", bd=1)
+        self.ent_fecha_hasta.grid(row=0, column=0, sticky="ew")
+        tk.Button(
+            frame_hasta, text="🔄 Reiniciar", font=("Helvetica", 8, "bold"),
+            bg="#6c757d", fg="#ffffff", bd=0, cursor="hand2", padx=6,
+            command=self.reiniciar_dias_y_fechas
+        ).grid(row=0, column=1, padx=(6, 0))
 
-        # 12. Código Coordinación Asistencial
-        self.ent_codigo_registro = tk.Entry(self, font=("Helvetica", 10), bg="#f0f2f5", bd=1)
-        self.ent_codigo_registro.grid(row=12, column=1, sticky="ew", pady=4, padx=10)
+        # Médico Tratante
+        r = nueva_fila()
+        crear_etiqueta("Médico Tratante:", r)
+        self.ent_medico = tk.Entry(self.frame_tramite, font=("Helvetica", 10), bg="#f0f2f5", bd=1)
+        self.ent_medico.grid(row=r, column=1, sticky="ew", pady=4, padx=10)
 
-        # 13. Asignación de Código / Color
-        self.cmb_seleccion_codigo_asistencial = ttk.Combobox(self, values=["Verde claro","Verde oscuro","Amarillo", "Naranja", "Rojo", "Azul claro","Azul oscuro","rosado", "fuxia","Gris", "Negro", "Marron"], state="readonly")
-        self.cmb_seleccion_codigo_asistencial.grid(row=13, column=1, sticky="ew", pady=4, padx=10)
+        # Código Registro Médico
+        r = nueva_fila()
+        crear_etiqueta("Código Registro Médico:", r)
+        self.ent_codigo_medico = tk.Entry(self.frame_tramite, font=("Helvetica", 10), bg="#f0f2f5", bd=1)
+        self.ent_codigo_medico.grid(row=r, column=1, sticky="ew", pady=4, padx=10)
+
+        # Código Coordinación Asistencial
+        r = nueva_fila()
+        crear_etiqueta("Código Coordinación Asistencial:", r)
+        self.ent_codigo_registro = tk.Entry(self.frame_tramite, font=("Helvetica", 10), bg="#f0f2f5", bd=1)
+        self.ent_codigo_registro.grid(row=r, column=1, sticky="ew", pady=4, padx=10)
+
+        # Asignación de Código / Color
+        r = nueva_fila()
+        crear_etiqueta("Asignación de Código / Color:", r)
+        self.cmb_seleccion_codigo_asistencial = ttk.Combobox(self.frame_tramite, values=COLORES_ASISTENCIALES, state="readonly")
+        self.cmb_seleccion_codigo_asistencial.grid(row=r, column=1, sticky="ew", pady=4, padx=10)
         self.cmb_seleccion_codigo_asistencial.current(0)
 
-        # 14. Especialidad
-        lista_especialidades = [
-            "Medicina general", "Medicina crítica", "Medicina familiar", 
-            "Medicina interna", "Psiquiatria", "Pediatría", "Ginecología", 
-            "Otorrinolaringología", "Traumatología", "Cardiología", "Odontología"
-        ]
-        self.cmb_especialidad = ttk.Combobox(self, values=lista_especialidades, state="readonly", font=("Helvetica", 10))
-        self.cmb_especialidad.grid(row=14, column=1, sticky="ew", pady=4, padx=10)
+        # Especialidad
+        r = nueva_fila()
+        crear_etiqueta("Especialidad:", r)
+        self.cmb_especialidad = ttk.Combobox(self.frame_tramite, values=ESPECIALIDADES, state="readonly", font=("Helvetica", 10))
+        self.cmb_especialidad.grid(row=r, column=1, sticky="ew", pady=4, padx=10)
         self.cmb_especialidad.current(0)
 
-        self.columnconfigure(1, weight=1)
+        self.frame_tramite.columnconfigure(1, weight=1)
 
-        # --- Autocompletado y sugerencia automática de fechas ---
         self.campo_desde_manual = False
         self.campo_hasta_manual = False
 
-        self.ent_cedula.bind("<FocusOut>", self._autocompletar_beneficiario)
         self.ent_dias.bind("<KeyRelease>", self._al_cambiar_dias_o_tipo)
-        self.cmb_tipo.bind("<<ComboboxSelected>>", self._al_cambiar_dias_o_tipo)
+        self.cmb_tipo.bind("<<ComboboxSelected>>", self._al_cambiar_tipo)
         self.ent_fecha_desde.bind("<KeyRelease>", self._al_editar_fecha_desde_manual)
         self.ent_fecha_hasta.bind("<KeyRelease>", self._al_editar_fecha_hasta_manual)
 
-        # Botón de guardar
-        btn_guardar = tk.Button(
-            self, text="GUARDAR REGISTRO", font=("Helvetica", 11, "bold"),
+        r = nueva_fila()
+        self.btn_guardar = tk.Button(
+            self.frame_tramite, text="GUARDAR REGISTRO", font=("Helvetica", 11, "bold"),
             bg=self.COLOR_PRIMARY, fg="#ffffff", activebackground="#0088a3", activeforeground="#ffffff",
             bd=0, cursor="hand2", command=self.procesar_registro
         )
-        btn_guardar.grid(row=15, column=0, columnspan=2, pady=(15, 0), ipady=8, sticky="ew")
+        self.btn_guardar.grid(row=r, column=0, columnspan=2, pady=(15, 0), ipady=8, sticky="ew")
 
-        # El rol "visualizador" no tiene permiso para registrar reposos/cuidos
+        self._actualizar_visibilidad_cuido()
+        self._bloquear_formulario_tramite()
+
+    # ------------------------------------------------------------------
+
+    def _validar_cedula(self, texto):
+        return (texto.isdigit() or texto == "") and len(texto) <= 10
+
+    def _bloquear_formulario_tramite(self):
+        self._establecer_estado_tramite("disabled")
+        self.btn_ir_a_registrar.grid_forget()
+
+    def _establecer_estado_tramite(self, estado):
+        estado_combo = "disabled" if estado == "disabled" else "readonly"
+        widgets_entry = [self.ent_dias, self.ent_fecha_desde, self.ent_fecha_hasta,
+                          self.ent_medico, self.ent_codigo_medico, self.ent_codigo_registro,
+                          self.ent_beneficiario_para]
+        widgets_combo = [self.cmb_tipo, self.cmb_parentesco, self.cmb_seleccion_codigo_asistencial, self.cmb_especialidad]
+        for w in widgets_entry:
+            w.configure(state=estado)
+        for w in widgets_combo:
+            w.configure(state=estado_combo)
+        self.btn_guardar.configure(state=("disabled" if estado == "disabled" else "normal"))
         if self.rol == "visualizador":
-            btn_guardar.configure(state="disabled")
+            self.btn_guardar.configure(state="disabled")
 
-    def _validar_entrada_solo_numeros(self, texto):
-        """Impide escribir caracteres distintos a dígitos numéricos en la Cédula."""
-        return texto.isdigit() or texto == ""
-
-    def _autocompletar_beneficiario(self, event=None):
-        """Al salir del campo Cédula, si el beneficiario ya está registrado,
-        rellena sus datos personales automáticamente (campos vacíos únicamente)."""
+    def buscar_persona(self):
         cedula = re.sub(r"\D", "", self.ent_cedula.get().strip())
         if not cedula:
             return
 
         beneficiario = base_datos.obtener_beneficiario_por_cedula(cedula)
         if not beneficiario:
+            self.persona_encontrada = None
+            self.lbl_info_persona.config(
+                text=f"⚠ No existe ninguna persona registrada con la cédula {cedula}. "
+                     f"Debe registrarla primero en el módulo Personas.",
+                fg="#c62828"
+            )
+            self.btn_ir_a_registrar.grid(row=2, column=0, columnspan=3, sticky="w", pady=(8, 0))
+            self._bloquear_formulario_tramite()
             return
 
+        self.persona_encontrada = beneficiario
         _, nombre, telefono, institucion, cargo = beneficiario
+        self.lbl_info_persona.config(
+            text=f"✓ {nombre}  |  Tel: {telefono}  |  {institucion} — {cargo}",
+            fg="#2e7d32"
+        )
+        self.btn_ir_a_registrar.grid_forget()
+        if self.rol != "visualizador":
+            self._establecer_estado_tramite("normal")
 
-        if not self.ent_nombre.get().strip():
-            self.ent_nombre.insert(0, nombre)
-        if not self.ent_telefono.get().strip():
-            self.ent_telefono.insert(0, telefono)
-        if not self.ent_institucion.get().strip():
-            self.ent_institucion.insert(0, institucion)
-        if cargo in self.cmb_cargo["values"]:
-            self.cmb_cargo.set(cargo)
+    def _ir_a_registrar_persona(self):
+        cedula = re.sub(r"\D", "", self.ent_cedula.get().strip())
+        if self.ir_a_personas_callback:
+            self.ir_a_personas_callback(cedula)
+
+    # ------------------------------------------------------------------
+    # Cuido: mostrar/ocultar campos de "para quién" y "parentesco"
+    # ------------------------------------------------------------------
+
+    def _actualizar_visibilidad_cuido(self):
+        if self.cmb_tipo.get() == "Cuido":
+            self.lbl_beneficiario_para.grid(row=self._fila_beneficiario_para, column=0, sticky="w", pady=4, padx=5)
+            self.ent_beneficiario_para.grid(row=self._fila_beneficiario_para, column=1, sticky="ew", pady=4, padx=10)
+            self.lbl_parentesco.grid(row=self._fila_parentesco, column=0, sticky="w", pady=4, padx=5)
+            self.cmb_parentesco.grid(row=self._fila_parentesco, column=1, sticky="ew", pady=4, padx=10)
+        else:
+            self.lbl_beneficiario_para.grid_remove()
+            self.ent_beneficiario_para.grid_remove()
+            self.lbl_parentesco.grid_remove()
+            self.cmb_parentesco.grid_remove()
+
+    # ------------------------------------------------------------------
+    # Sugerencia automática de fechas / días
+    # ------------------------------------------------------------------
 
     def _al_editar_fecha_desde_manual(self, event=None):
         self.campo_desde_manual = True
@@ -180,15 +278,27 @@ class ModuloFormulario(tk.Frame):
             self._sugerir_fecha_desde()
         self._recalcular_fecha_hasta()
 
+    def _al_cambiar_tipo(self, event=None):
+        self._actualizar_visibilidad_cuido()
+
+        if self.cmb_tipo.get() == "Pre y Post-Natal (150 días)":
+            self.ent_dias.configure(state="normal")
+            self.ent_dias.delete(0, tk.END)
+            self.ent_dias.insert(0, "150")
+            if not self.campo_desde_manual:
+                self._sugerir_fecha_desde()
+            self.campo_hasta_manual = False
+            self._recalcular_fecha_hasta()
+            return
+
+        self._al_cambiar_dias_o_tipo()
+
     def _sugerir_fecha_desde(self):
         hoy = datetime.date.today()
         self.ent_fecha_desde.delete(0, tk.END)
         self.ent_fecha_desde.insert(0, hoy.strftime("%d-%m-%Y"))
 
     def _recalcular_fecha_hasta(self):
-        """Sugiere la 'Fecha Hasta' según los días solicitados y el tipo de trámite:
-        para Reposos cuentan todos los días corridos, para Cuidos solo días hábiles
-        (sin sábados, domingos ni feriados de Venezuela). El usuario puede modificarla."""
         if self.campo_hasta_manual:
             return
 
@@ -212,22 +322,25 @@ class ModuloFormulario(tk.Frame):
         self.ent_fecha_hasta.delete(0, tk.END)
         self.ent_fecha_hasta.insert(0, fecha_hasta.strftime("%d-%m-%Y"))
 
-    def prellenar_para_renovacion(self, cedula, nombre, telefono, institucion, cargo, tipo, dias_restantes, fecha_inicio_renovacion):
-        self.limpiar_campos()
-        cedula_limpia = re.sub(r"\D", "", str(cedula))
-        self.ent_cedula.insert(0, cedula_limpia)
-        self.ent_telefono.insert(0, str(telefono))
-        self.ent_nombre.insert(0, str(nombre))
-        self.ent_institucion.insert(0, str(institucion))
-        
-        if cargo in ["Docente", "Administrativo", "Personal de Apoyo"]:
-            self.cmb_cargo.set(cargo)
+    def reiniciar_dias_y_fechas(self):
+        self.ent_dias.delete(0, tk.END)
+        self.ent_fecha_desde.delete(0, tk.END)
+        self.ent_fecha_hasta.delete(0, tk.END)
+        self.campo_desde_manual = False
+        self.campo_hasta_manual = False
 
-        if tipo in ["Cuido", "Reposo Regular", "Pre-Natal (61 días)", "Post-Natal (89 días)"]:
+    def prellenar_para_renovacion(self, cedula, tipo, dias_restantes, fecha_inicio_renovacion):
+        self.limpiar_campos()
+        cedula_limpia = re.sub(r"\D", "", str(cedula))[:10]
+        self.ent_cedula.insert(0, cedula_limpia)
+        self.buscar_persona()
+
+        if tipo in TIPOS_TRAMITE:
             self.cmb_tipo.set(tipo)
+        self._actualizar_visibilidad_cuido()
 
         self.ent_dias.insert(0, str(dias_restantes))
-        
+
         if isinstance(fecha_inicio_renovacion, (datetime.date, datetime.datetime)):
             fecha_fmt = fecha_inicio_renovacion.strftime("%d-%m-%Y")
         else:
@@ -238,62 +351,61 @@ class ModuloFormulario(tk.Frame):
                 fecha_fmt = str(fecha_inicio_renovacion)
 
         self.ent_fecha_desde.insert(0, fecha_fmt)
-
-        # La fecha desde ya fue fijada intencionalmente por la renovación;
-        # se sugiere la fecha hasta en base a esta, pero sigue siendo editable.
         self.campo_desde_manual = True
         self.campo_hasta_manual = False
         self._recalcular_fecha_hasta()
+
+    def prellenar_cedula(self, cedula):
+        """Llamado al volver desde el módulo Personas tras registrar a alguien,
+        para retomar el registro del trámite sin volver a escribir la cédula."""
+        self.limpiar_campos()
+        self.ent_cedula.insert(0, cedula)
+        self.buscar_persona()
+
+    # ------------------------------------------------------------------
+    # Guardado / validación del registro
+    # ------------------------------------------------------------------
 
     def procesar_registro(self):
         if self.rol == "visualizador":
             messagebox.showerror("Acceso Denegado", "Su rol de Visualizador no tiene permiso para registrar trámites.")
             return
-        try:
-            cedula_raw = self.ent_cedula.get().strip()
-            cedula = re.sub(r"\D", "", cedula_raw)
 
-            telefono = self.ent_telefono.get().strip()
-            nombre = self.ent_nombre.get().strip()
-            institucion = self.ent_institucion.get().strip()
-            cargo = self.cmb_cargo.get()
+        if not self.persona_encontrada:
+            messagebox.showwarning("Atención", "Primero debe buscar y confirmar una persona registrada por su cédula.")
+            return
+
+        try:
+            cedula = self.persona_encontrada[0]
+
             tipo = self.cmb_tipo.get()
             dias_str = self.ent_dias.get().strip()
             fecha_desde_str = self.ent_fecha_desde.get().strip()
             fecha_hasta_str = self.ent_fecha_hasta.get().strip()
-            
+
             codigo_rojo = self.cmb_seleccion_codigo_asistencial.get()
-            medico = self.ent_medico.get().strip()
+            medico = self.ent_medico.get().strip().upper()
             especialidad = self.cmb_especialidad.get()
             codigo_registro = self.ent_codigo_registro.get().strip()
             codigo_medico = self.ent_codigo_medico.get().strip()
 
+            beneficiario_para = self.ent_beneficiario_para.get().strip().upper() if tipo == "Cuido" else ""
+            parentesco = self.cmb_parentesco.get() if tipo == "Cuido" else ""
+
             campos_vacios = []
-            if not cedula: campos_vacios.append("Cédula")
-            if not telefono: campos_vacios.append("Teléfono")
-            if not nombre: campos_vacios.append("Nombre y Apellido")
-            if not institucion: campos_vacios.append("Institución")
             if not dias_str: campos_vacios.append("Días Solicitados")
             if not fecha_desde_str: campos_vacios.append("Fecha Desde")
             if not fecha_hasta_str: campos_vacios.append("Fecha Hasta")
             if not medico: campos_vacios.append("Médico Tratante")
             if not especialidad: campos_vacios.append("Especialidad")
             if not codigo_registro: campos_vacios.append("Código de coordinación asistencial")
+            if tipo == "Cuido" and not beneficiario_para: campos_vacios.append("¿Para quién se solicita el cuido?")
 
             if campos_vacios:
                 messagebox.showwarning(
-                    "Campos Incompletos", 
+                    "Campos Incompletos",
                     f"Por favor complete los siguientes campos requeridos:\n\n• " + "\n• ".join(campos_vacios)
                 )
-                return
-
-            if not cedula.isdigit():
-                messagebox.showerror("Error de Validación", "La Cédula debe contener únicamente números sin puntos ni caracteres.")
-                return
-
-            telefono_limpio = telefono.replace("-", "").replace(" ", "").replace("+", "")
-            if not telefono_limpio.isdigit() or len(telefono_limpio) < 7:
-                messagebox.showerror("Error de Validación", "Ingrese un número de Teléfono válido.")
                 return
 
             if not dias_str.isdigit() or int(dias_str) <= 0:
@@ -321,18 +433,19 @@ class ModuloFormulario(tk.Frame):
                 messagebox.showerror("Error de Fecha", "'Fecha Hasta' no puede ser anterior a 'Fecha Desde'.")
                 return
 
-            if tipo == "Cuido" and dias > 20:
-                messagebox.showerror("Límite Superado", "Los permisos de Cuido no pueden exceder los 20 días hábiles.")
+            tope_tipo = base_datos.TOPES_DIAS.get(tipo)
+            if tope_tipo is not None and dias > tope_tipo:
+                messagebox.showerror("Límite Superado", f"El trámite '{tipo}' no puede exceder los {tope_tipo} días.")
                 return
-            elif tipo == "Reposo Regular" and dias > 21:
-                messagebox.showerror("Límite Superado", "Un reposo individual no puede exceder de 21 días.")
-                return
-            elif tipo == "Pre-Natal (61 días)" and dias > 61:
-                messagebox.showerror("Límite Superado", "El Pre-Natal no puede exceder 61 días.")
-                return
-            elif tipo == "Post-Natal (89 días)" and dias > 89:
-                messagebox.showerror("Límite Superado", "El Post-Natal no puede exceder 89 días.")
-                return
+
+            if tipo == "Reposo Regular" and especialidad == "Medicina general" and dias > 3:
+                continuar = messagebox.askyesno(
+                    "Aviso: Medicina General",
+                    f"Un reposo por Medicina General normalmente no debe exceder de 3 días "
+                    f"(se están solicitando {dias} días).\n\n¿Desea continuar de todas formas?"
+                )
+                if not continuar:
+                    return
 
             historial = base_datos.buscar_por_cedula(cedula)
             hace_un_ano = fecha_desde - datetime.timedelta(days=365)
@@ -363,7 +476,7 @@ class ModuloFormulario(tk.Frame):
                 if "Cuido" in t_reg and f_desde_reg >= hace_un_ano:
                     dias_cuido_acumulados += d_reg
 
-                if ("Reposo" in t_reg or "Natal" in t_reg) and f_desde_reg >= hace_seis_meses:
+                if t_reg == "Reposo Regular" and f_desde_reg >= hace_seis_meses:
                     dias_reposo_acumulados += d_reg
 
             if tipo == "Cuido" and (dias_cuido_acumulados + dias) > 20:
@@ -374,7 +487,7 @@ class ModuloFormulario(tk.Frame):
                 )
                 return
 
-            if ("Reposo" in tipo or "Natal" in tipo) and (dias_reposo_acumulados + dias) > 84:
+            if tipo == "Reposo Regular" and (dias_reposo_acumulados + dias) > 84:
                 messagebox.showerror(
                     "Límite de 84 Días Superado",
                     f"El solicitante tiene {dias_reposo_acumulados} días acumulados en los últimos 6 meses.\n"
@@ -382,15 +495,15 @@ class ModuloFormulario(tk.Frame):
                 )
                 return
 
-            datos_beneficiario = (cedula, nombre, telefono, institucion, cargo)
             datos_reposo = (
                 cedula, tipo, dias, str(fecha_desde), str(fecha_hasta),
-                codigo_rojo, medico, especialidad, codigo_registro
+                codigo_rojo, medico, especialidad, codigo_registro,
+                beneficiario_para, parentesco
             )
 
-            base_datos.guardar_registro(datos_beneficiario, datos_reposo)
+            base_datos.guardar_registro(datos_reposo)
             messagebox.showinfo("Registro Exitoso", f"Trámite registrado correctamente hasta el {fecha_hasta.strftime('%d-%m-%Y')}.")
-            
+
             self.limpiar_campos()
             if self.al_guardar_callback:
                 self.al_guardar_callback()
@@ -400,18 +513,23 @@ class ModuloFormulario(tk.Frame):
 
     def limpiar_campos(self):
         self.ent_cedula.delete(0, tk.END)
-        self.ent_telefono.delete(0, tk.END)
-        self.ent_nombre.delete(0, tk.END)
-        self.ent_institucion.delete(0, tk.END)
+        self.persona_encontrada = None
+        self.lbl_info_persona.config(text="Ingrese la cédula y presione Buscar (o Enter) para continuar.", fg="#666666")
+        self.btn_ir_a_registrar.grid_forget()
+
+        self._establecer_estado_tramite("normal")
         self.ent_dias.delete(0, tk.END)
         self.ent_fecha_desde.delete(0, tk.END)
         self.ent_fecha_hasta.delete(0, tk.END)
         self.ent_medico.delete(0, tk.END)
         self.ent_codigo_registro.delete(0, tk.END)
         self.ent_codigo_medico.delete(0, tk.END)
-        self.cmb_cargo.current(0)
+        self.ent_beneficiario_para.delete(0, tk.END)
         self.cmb_tipo.current(0)
+        self.cmb_parentesco.current(0)
         self.cmb_seleccion_codigo_asistencial.current(0)
         self.cmb_especialidad.current(0)
         self.campo_desde_manual = False
         self.campo_hasta_manual = False
+        self._actualizar_visibilidad_cuido()
+        self._bloquear_formulario_tramite()

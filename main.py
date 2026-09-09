@@ -6,15 +6,15 @@ from dashboard import VentanaDashboard
 
 def iniciar_sesion():
     root_login = tk.Tk()
-    VentanaLogin(root_login, al_ingresar_exitoso=lambda rol: abrir_dashboard(root_login, rol))
+    VentanaLogin(root_login, al_ingresar_exitoso=lambda rol, usuario: abrir_dashboard(root_login, rol, usuario))
     root_login.mainloop()
 
 
-def abrir_dashboard(root_login, rol):
+def abrir_dashboard(root_login, rol, usuario):
     root_login.destroy()
 
     root_principal = tk.Tk()
-    VentanaDashboard(root_principal, rol, al_cerrar_sesion=iniciar_sesion)
+    VentanaDashboard(root_principal, rol, usuario=usuario, al_cerrar_sesion=iniciar_sesion)
     root_principal.mainloop()
 
 
