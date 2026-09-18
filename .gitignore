@@ -1,0 +1,10 @@
+# Archivos de base de datos
+*.db
+*.sqlite3
+
+# Compilados de Python
+__pycache__/
+*.pyc
+
+# Entorno virtual
+.venv/
